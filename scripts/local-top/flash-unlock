@@ -1,0 +1,62 @@
+#!/bin/sh
+
+PREREQ=""
+prereqs()
+{
+        echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+        prereqs
+        exit 0
+        ;;
+esac
+
+. /scripts/functions
+
+plymouthd --mode=boot --kernel-command-line="quiet splash"
+pcscd
+plymouth --debug show-splash
+
+for i in 3 2 1 0 do
+do
+	pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken: ")
+	pin_length=$(echo -n $pin | wc -m)
+	pin_length=$(printf "%02X\n" $pin_length)
+	pin=$(echo -n $pin | hexdump -v -e '/1 ":%02X"')
+	
+	echo "00:20:00:02:$pin_length$pin"
+
+	res=$(opensc-tool --send-apdu "00:20:00:02:$pin_length$pin" | grep Received) 
+	
+	
+	if [[ "$res" == "Received (SW1=0x90, SW2=0x00)" ]]
+	then
+		break
+	fi
+
+
+	if [[ "$i" != "0" ]]
+	then
+		plymouth display-message --text "Invalid PIN. ($i attempts left)"
+	else
+		plymouth display-message --text "No attempts left"
+		sleep 1
+		panic "PIN is invalid"
+	fi
+done
+
+plymouth display-message --text "Unlock partition"
+
+opensc-tool --send-apdu "80:53:11:01:04:82:02:02:03"
+opensc-tool --send-apdu "80:40:00:00:00"
+
+killall pcscd
+
+for dev in $(ls /dev/sd?)
+do
+	blockdev --rereadpt $dev
+done
+
+exit 0
