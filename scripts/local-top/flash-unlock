@@ -15,48 +15,168 @@ esac
 
 . /scripts/functions
 
-plymouthd --mode=boot --kernel-command-line="quiet splash"
-pcscd
-plymouth --debug show-splash
-
-for i in 3 2 1 0 do
-do
-	pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken: ")
-	pin_length=$(echo -n $pin | wc -m)
-	pin_length=$(printf "%02X\n" $pin_length)
-	pin=$(echo -n $pin | hexdump -v -e '/1 ":%02X"')
-	
-	echo "00:20:00:02:$pin_length$pin"
-
-	res=$(opensc-tool --send-apdu "00:20:00:02:$pin_length$pin" | grep Received) 
-	
-	
-	if [[ "$res" == "Received (SW1=0x90, SW2=0x00)" ]]
+exec_apdu()
+{
+	local apdu="$1"
+	local out
+	out=$(opensc-tool --send-apdu "$apdu" 2>&1)
+	if [ "$?" = "0" ] && [ "$(echo -n "$out" | grep Received)" = "Received (SW1=0x90, SW2=0x00)" ]
 	then
-		break
-	fi
-
-
-	if [[ "$i" != "0" ]]
-	then
-		plymouth display-message --text "Invalid PIN. ($i attempts left)"
+		return 0
 	else
-		plymouth display-message --text "No attempts left"
-		sleep 1
-		panic "PIN is invalid"
+		echo "$out"
+		return 1
 	fi
-done
+}
 
-plymouth display-message --text "Unlock partition"
+print_msg()
+{
+	local msg="$1"
+	if plymouth --ping 2> /dev/null
+	then
+		plymouth display-message --text "$msg"
+	else
+		echo -e "$msg"
+	fi
+}
 
-opensc-tool --send-apdu "80:53:11:01:04:82:02:02:03"
-opensc-tool --send-apdu "80:40:00:00:00"
+FLASH_PIN=""
+get_pin()
+{
+	if [ ! -z "$FLASH_PIN" ]
+	then
+		pin="$FLASH_PIN"
+	elif plymouth --ping 2> /dev/null
+	then
+		pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken: ")
+	else
+		echo -n "Enter pin for Rutoken: "
+		read -s pin
+		echo
+	fi
 
-killall pcscd
+	return 0
+}
 
-for dev in $(ls /dev/sd?)
-do
-	blockdev --rereadpt $dev
-done
+unlock_flash()
+{
+	local r
+	printf "Trying to unlock flash.\n"
+	
+	for i in 3 2 1 0 
+	do
+		local pin_length res
+		get_pin
+		r=$?
+		if [ "$r" != "0" ]
+		then
+			return $r
+		fi
+		
+		pin_length=$(echo -n $pin | wc -m) 
+	        pin_length=$(printf "%02X\n" $pin_length)
+	        pin=$(echo -n $pin | hexdump -v -e '/1 ":%02X"')
 
-exit 0
+	        out=$(exec_apdu "00:20:00:02:$pin_length$pin")
+		r=$?
+		if [ "$r" = "0" ]
+        	then
+                	break
+        	fi
+        	        
+        	if [ "$i" != "0" ]
+        	then
+        	        print_msg "Invalid PIN. ($i attempts left)"
+			printf 'ERROR(flash-unlock): invalid pin entered\n' >&2
+        	else
+        	        print_msg "No attempts left"
+			printf 'ERROR(flash-unlock): no pin code attempts left\n' >&2
+        	        sleep 1
+		fi
+	done
+
+	return $r
+}
+
+get_perm_id()
+{
+	case $1 in
+		hi)
+			echo -n 00
+			;;
+		ro)
+			echo -n 01
+			;;
+		wo)
+			echo -n 02
+			;;
+		rw)
+			echo -n 03
+			;;
+		cd)
+			echo -n 85
+			;;
+	esac
+}
+
+get_num()
+{
+	local num=$(echo -n $1 |  tail -c 1)
+	num=$(($num + 1))
+	printf '%02x' $num
+}
+
+change_part()
+{
+	local part=$(get_num "$1")
+	local perm=$(get_perm_id "$2")
+	local r
+
+        exec_apdu "80:53:11:01:04:82:02:$part:$perm"
+        r=$?
+        if [ "$r" != "0" ]
+        then
+        	printf 'ERROR(flash-unlock): error occured while change permissions of %s\n' $1 >&2
+        else
+        	printf 'Partition permission $s changed to $s\n' $1 $2
+        fi
+
+	return $r
+}
+
+main()
+{
+	mkdir -p /var/log
+	pcscd -fd > /var/log/pcscd &
+
+	for ARGUMENT in $(cat /proc/cmdline)
+	do
+        	case "${ARGUMENT}" in
+                	pin*)
+				FLASH_PIN=$(echo ${ARGUMENT} | cut -d "=" -f2-)
+        	esac
+	done
+
+	unlock_flash
+
+	for ARGUMENT in $(cat /proc/cmdline)
+	do
+        	case "${ARGUMENT}" in
+                	flash-unlock*)
+				local part=$(echo ${ARGUMENT} | cut -d "=" -f 2)
+				local perm=$(echo ${ARGUMENT} | cut -d "=" -f 3)
+				change_part "$part" "$perm"
+        	                ;;
+        	esac
+	done
+
+	exec_apdu "80:40:00:00:00"
+	killall pcscd
+
+	for dev in $(ls /dev/sd?)
+	do
+		blockdev --rereadpt $dev
+	done
+}
+
+main
