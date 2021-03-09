@@ -138,7 +138,7 @@ change_part()
         then
         	printf 'ERROR(flash-unlock): error occured while change permissions of %s\n' $1 >&2
         else
-        	printf 'Partition permission $s changed to $s\n' $1 $2
+        	printf 'Partition permission %s changed to %s\n' $1 $2
         fi
 
 	return $r
@@ -163,9 +163,14 @@ main()
 	do
         	case "${ARGUMENT}" in
                 	flash-unlock*)
-				local part=$(echo ${ARGUMENT} | cut -d "=" -f 2)
-				local perm=$(echo ${ARGUMENT} | cut -d "=" -f 3)
-				change_part "$part" "$perm"
+				local arg=$(echo ${ARGUMENT} | cut -d "=" -f 2-)
+				IFS=','
+				for part_perm in ${arg}
+				do
+					local part=$(echo ${part_perm} | cut -d "=" -f 1)
+					local perm=$(echo ${part_perm} | cut -d "=" -f 2)
+					change_part "$part" "$perm"
+				done
         	                ;;
         	esac
 	done
