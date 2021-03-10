@@ -170,6 +170,9 @@ main()
 					local part=$(echo ${part_perm} | cut -d "=" -f 1)
 					local perm=$(echo ${part_perm} | cut -d "=" -f 2)
 					change_part "$part" "$perm"
+
+                                        blockdev --rereadpt "/dev/disk/by-id/usb-$part"
+
 				done
         	                ;;
         	esac
@@ -177,11 +180,6 @@ main()
 
 	exec_apdu "80:40:00:00:00"
 	killall pcscd
-
-	for dev in $(ls /dev/sd?)
-	do
-		blockdev --rereadpt $dev
-	done
 }
 
 main
