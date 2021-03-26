@@ -18,6 +18,17 @@ esac
 
 . /usr/share/initramfs-tools/hook-functions
 
+
+copy_libs()
+{
+	local lib_name=$1
+	local pathes=$(ldconfig -p | grep "$lib_name" | rev | cut -f1 -d " " | rev)
+	for path in $pathes
+	do
+		cp $path ${DESTDIR}/lib	
+	done
+}
+
 # Hooks for loading smartcard reading software into the initramfs
 
 # Install directories needed by smartcard reading daemon, command, and
@@ -28,27 +39,27 @@ done
 
 # Install pcscd daemon, drivers, conf file, and include libgcc as well since
 # pcscd utilizes pthread_cancel
-copy_exec /usr/sbin/pcscd /sbin
-copy_exec /bin/hexdump /bin
+copy_exec $(PATH=$PATH:/usr/sbin:/sbin which pcscd) /sbin
+copy_exec $(which hexdump) /bin
 
 cp -r /usr/lib/pcsc ${DESTDIR}/usr/lib
 cp -r /etc/reader.conf.d ${DESTDIR}/etc
 cp /etc/libccid_Info.plist ${DESTDIR}/etc
 
 # Install opensc commands and conf file
-copy_exec /usr/bin/opensc-tool /bin
+copy_exec $(which opensc-tool) /bin
 cp /etc/opensc/opensc.conf ${DESTDIR}/etc/opensc
 
 # Install other required utilities
-copy_exec /bin/grep /bin
+copy_exec $(which grep) /bin
 copy_exec /bin/mv /bin
 copy_exec /bin/rm /bin
-copy_exec /usr/bin/xxd /bin
-copy_exec /usr/bin/killall /bin
+copy_exec $(which xxd) /bin
+copy_exec $(which killall) /bin
 
 # Main scripts
 
 # Libraries
-cp /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 ${DESTDIR}/lib
-cp /usr/lib/x86_64-linux-gnu/libpcsclite.so.1 ${DESTDIR}/lib
-cp /usr/lib/x86_64-linux-gnu/libusb-1.0.so.0 ${DESTDIR}/lib
+copy_libs libcrypto
+copy_libs libpcsclite
+copy_libs libusb
