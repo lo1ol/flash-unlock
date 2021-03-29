@@ -63,3 +63,4 @@ copy_exec $(which killall) /bin
 copy_libs libcrypto
 copy_libs libpcsclite
 copy_libs libusb
+copy_libs libgcc_s

@@ -48,7 +48,7 @@ get_pin()
 		pin="$FLASH_PIN"
 	elif plymouth --ping 2> /dev/null
 	then
-		pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken: ")
+		pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken ")
 	else
 		echo -n "Enter pin for Rutoken: "
 		read -s pin
@@ -152,12 +152,22 @@ main()
 	for ARGUMENT in $(cat /proc/cmdline)
 	do
         	case "${ARGUMENT}" in
-                	pin*)
+                	flash-pin*)
 				FLASH_PIN=$(echo ${ARGUMENT} | cut -d "=" -f2-)
+        			;;
+		esac
+	done
+
+	for ARGUMENT in $(cat /proc/cmdline)
+	do
+        	case "${ARGUMENT}" in
+                	flash-unlock*)
+				unlock_flash
+				break
+				;;
         	esac
 	done
 
-	unlock_flash
 
 	for ARGUMENT in $(cat /proc/cmdline)
 	do
