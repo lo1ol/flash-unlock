@@ -48,9 +48,9 @@ get_pin()
 		pin="$FLASH_PIN"
 	elif plymouth --ping 2> /dev/null
 	then
-		pin=$(plymouth ask-for-password --prompt "Enter pin for Rutoken ")
+		pin=$(plymouth ask-for-password --prompt "Enter PIN for Rutoken ")
 	else
-		echo -n "Enter pin for Rutoken: "
+		echo -n "Enter PIN for Rutoken: "
 		read -s pin
 		echo
 	fi
@@ -87,10 +87,10 @@ unlock_flash()
         	if [ "$i" != "0" ]
         	then
         	        print_msg "Invalid PIN. ($i attempts left)"
-			printf 'ERROR(flash-unlock): invalid pin entered\n' >&2
+			printf 'ERROR(flash-unlock): invalid PIN entered\n' >&2
         	else
         	        print_msg "No attempts left"
-			printf 'ERROR(flash-unlock): no pin code attempts left\n' >&2
+			printf 'ERROR(flash-unlock): no attempts left\n' >&2
         	        sleep 1
 		fi
 	done
